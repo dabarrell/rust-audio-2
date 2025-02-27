@@ -1,4 +1,6 @@
 import Image from "next/image";
+import GreetButton from "@/components/GreetButton";
+import AudioWrapper from "@/components/AudioWrapper";
 
 export default function Home() {
   return (
@@ -22,6 +24,13 @@ export default function Home() {
           </li>
           <li>Save and see your changes instantly.</li>
         </ol>
+
+        <GreetButton />
+
+        {/* Add the AudioControls component */}
+        <div className="w-full max-w-md">
+          <AudioWrapper />
+        </div>
 
         <div className="flex gap-4 items-center flex-col sm:flex-row">
           <a
