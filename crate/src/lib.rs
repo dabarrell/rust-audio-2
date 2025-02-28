@@ -90,15 +90,17 @@ impl AudioEngine {
         // Create a closure that will be called periodically to process audio
         let closure = Closure::wrap(Box::new(move || {
             if let Ok(mut osc) = oscillator_clone.try_borrow_mut() {
-                // Process 128 samples at a time (common audio buffer size)
-                let _ = osc.process(128);
+                // Process 256 samples at a time (double the common audio buffer size)
+                // to ensure we stay ahead of the audio worklet's consumption
+                let _ = osc.process(256);
             }
         }) as Box<dyn FnMut()>);
 
-        // Set up the interval (process every 10ms)
+        // Set up the interval (process every 2ms instead of 10ms)
+        // This ensures we're generating samples faster than they're consumed
         let interval_id = window.set_interval_with_callback_and_timeout_and_arguments_0(
             closure.as_ref().unchecked_ref(),
-            10,
+            2,
         )?;
 
         // Forget the closure so it's not dropped

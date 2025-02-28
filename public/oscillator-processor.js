@@ -8,7 +8,7 @@ class OscillatorProcessor extends AudioWorkletProcessor {
     this.readPtr = 0;
     this.writePtr = 0;
     this.bufferSize = 0;
-    this.metadataSize = 4; // [readPtr, writePtr, unused, unused]
+    this.metadataSize = 2; // [readPtr, writePtr]
 
     // Check if we have options with a shared buffer
     if (options && options.processorOptions && options.processorOptions.sharedBuffer) {
@@ -19,7 +19,7 @@ class OscillatorProcessor extends AudioWorkletProcessor {
       this.bufferView = new Float32Array(this.sharedBuffer);
 
       // Get the buffer size (excluding metadata)
-      this.bufferSize = this.bufferView.length - 4;
+      this.bufferSize = this.bufferView.length - this.metadataSize;
 
       // Initialize
       this.isInitialized = true;
@@ -49,6 +49,11 @@ class OscillatorProcessor extends AudioWorkletProcessor {
       available = this.bufferSize - this.readPtr + this.writePtr;
     }
 
+    // Keep track of the last sample value for sample-and-hold during underruns
+    if (!this.lastSample) {
+      this.lastSample = 0;
+    }
+
     // Fill all output channels
     for (let channel = 0; channel < output.length; channel++) {
       const outputChannel = output[channel];
@@ -57,14 +62,21 @@ class OscillatorProcessor extends AudioWorkletProcessor {
         if (available > 0) {
           // Read a sample from the buffer
           const bufferIdx = (this.readPtr % this.bufferSize) + this.metadataSize;
-          outputChannel[i] = this.bufferView[bufferIdx];
+          this.lastSample = this.bufferView[bufferIdx];
+          outputChannel[i] = this.lastSample;
 
           // Increment the read pointer
           this.readPtr = (this.readPtr + 1) % this.bufferSize;
           available--;
         } else {
-          // No more samples available, output silence
-          outputChannel[i] = 0;
+          // No more samples available, use sample-and-hold instead of silence
+          // This prevents clicks and pops during buffer underruns
+          outputChannel[i] = this.lastSample;
+
+          // Log buffer underruns (but not too frequently to avoid console spam)
+          if (Math.random() < 0.01) {
+            console.warn('Buffer underrun detected in audio processor');
+          }
         }
       }
     }

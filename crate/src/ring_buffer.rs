@@ -5,7 +5,7 @@ use wasm_bindgen::prelude::*;
 // Constants for the ring buffer
 const BUFFER_SIZE: usize = 4096; // Must be a power of 2
 const BUFFER_MASK: usize = BUFFER_SIZE - 1; // For efficient modulo operations
-const METADATA_SIZE: usize = 4; // For read and write pointers, rounded up to nearest multiple of 4
+const METADATA_SIZE: usize = 2; // For read and write pointers
 
 #[wasm_bindgen]
 pub struct RingBuffer {
@@ -37,7 +37,8 @@ impl RingBuffer {
     pub fn new() -> Result<RingBuffer, JsValue> {
         // Create a SharedArrayBuffer with space for the audio data plus metadata
         // Metadata: [read_ptr, write_ptr, unused, unused]
-        let buffer = SharedArrayBuffer::new((BUFFER_SIZE + METADATA_SIZE) as u32);
+        // Multiply by 4 because each float is 4 bytes
+        let buffer = SharedArrayBuffer::new(((BUFFER_SIZE + METADATA_SIZE) * 4) as u32);
         let buffer_view = Float32Array::new(&buffer);
 
         // Initialize read and write pointers to 0
@@ -62,11 +63,11 @@ impl RingBuffer {
         let write_ptr = self.write_ptr.load(Ordering::Acquire);
         let read_ptr = self.read_ptr.load(Ordering::Acquire);
 
-        // Calculate available space
+        // Calculate available space, leaving one slot empty to distinguish full from empty
         let available = if write_ptr >= read_ptr {
-            BUFFER_SIZE - (write_ptr - read_ptr)
+            BUFFER_SIZE - (write_ptr - read_ptr) - 1
         } else {
-            read_ptr - write_ptr
+            read_ptr - write_ptr - 1
         };
 
         // Don't write more than available space
@@ -80,7 +81,7 @@ impl RingBuffer {
         }
 
         // Update write pointer atomically
-        let new_write_ptr = (write_ptr + to_write) % BUFFER_SIZE;
+        let new_write_ptr = (write_ptr + to_write) & BUFFER_MASK;
         self.write_ptr.store(new_write_ptr, Ordering::Release);
 
         // Update the write pointer in the shared buffer for JS to read
@@ -115,10 +116,11 @@ impl RingBuffer {
         let write_ptr = self.write_ptr.load(Ordering::Acquire);
         let read_ptr = self.read_ptr.load(Ordering::Acquire);
 
+        // We need to leave one slot empty to distinguish between full and empty buffer
         if write_ptr >= read_ptr {
-            BUFFER_SIZE - (write_ptr - read_ptr)
+            BUFFER_SIZE - (write_ptr - read_ptr) - 1
         } else {
-            read_ptr - write_ptr
+            read_ptr - write_ptr - 1
         }
     }
 }
