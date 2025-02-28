@@ -78,17 +78,12 @@ self.onmessage = async (event) => {
 async function initWorker(sampleRate) {
   try {
     // Import the WASM module
+    // TODO: This re-downloads the wasm module. Explore passing the bytes from the main thread instead.
     const wasmImport = await import('/wasm/wasm_pack_test_27_feb.js');
-    // wasm = await wasmModule.default();
     await wasmImport.default();
 
-    // Create a new audio engine
-    // Use type assertion to tell TypeScript about the AudioEngine constructor
     const OscillatorClass = wasmImport.Oscillator;
     oscillator = new OscillatorClass(sampleRate);
-
-    // Create the oscillator once during initialization
-    // oscillator = new wasm.Oscillator(sampleRate);
 
     // Get the shared buffer to reuse later
     sharedBuffer = oscillator.get_shared_buffer();
