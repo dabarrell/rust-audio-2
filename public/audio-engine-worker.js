@@ -5,6 +5,7 @@ let isInitialized = false;
 let sharedBuffer;
 let isInitializing = false;
 let pendingOperations = [];
+let sourceType = 'oscillator'; // Default source type
 
 // Handle messages from the main thread
 self.onmessage = async (event) => {
@@ -31,7 +32,13 @@ self.onmessage = async (event) => {
 
       // Initialize the worker with the WASM module and shared buffer
       isInitializing = true;
-      await initWorker(data.sampleRate);
+
+      // Check if a source type was specified
+      if (data && data.sourceType) {
+        sourceType = data.sourceType;
+      }
+
+      await initWorker(data.sampleRate, sourceType);
       break;
 
     case 'loadAudioFile':
@@ -41,12 +48,31 @@ self.onmessage = async (event) => {
         console.log('File type:', data.file.type);
         console.log('File size:', data.file.size, 'bytes');
 
-        // Send acknowledgment back to main thread
-        self.postMessage({
-          type: 'audioFileReceived',
-          success: true,
-          fileName: data.file.name
-        });
+        try {
+          // Load the file into the audio source
+          if (audioSource && sourceType === 'opusPlayer') {
+            await audioSource.loadAudioFile(data.file);
+
+            // Send success message back to main thread
+            self.postMessage({
+              type: 'audioFileReceived',
+              success: true,
+              fileName: data.file.name
+            });
+          } else {
+            throw new Error('Audio source not initialized or not an opus player');
+          }
+        } catch (error) {
+          console.error('Error loading audio file:', error);
+
+          // Send error message back to main thread
+          self.postMessage({
+            type: 'audioFileReceived',
+            success: false,
+            error: error.message || 'Failed to load audio file',
+            fileName: data.file.name
+          });
+        }
       } else {
         console.error('Invalid audio file data received');
         self.postMessage({
@@ -92,21 +118,37 @@ self.onmessage = async (event) => {
       setFrequency(data.frequency);
       break;
 
+    case 'reset':
+      // Reset the audio source (for opus player)
+      if (!isInitialized) {
+        console.log('Ignoring reset operation - audio engine not initialized');
+        return;
+      }
+
+      resetAudioSource();
+      break;
+
     default:
       console.error('Unknown message type:', type);
   }
 };
 
 // Initialize the worker with the WASM module
-async function initWorker(sampleRate) {
+async function initWorker(sampleRate, sourceType = 'oscillator') {
   try {
     // Import the WASM module
     // TODO: This re-downloads the wasm module. Explore passing the bytes from the main thread instead.
     const wasmImport = await import('/wasm/wasm_pack_test_27_feb.js');
     await wasmImport.default();
 
-    // Create an oscillator source
-    audioSource = wasmImport.AudioSource.createOscillator(sampleRate);
+    // Create the appropriate audio source based on the source type
+    if (sourceType === 'oscillator') {
+      audioSource = wasmImport.AudioSource.createOscillator(sampleRate);
+    } else if (sourceType === 'opusPlayer') {
+      audioSource = wasmImport.AudioSource.createOpusPlayer(sampleRate);
+    } else {
+      throw new Error(`Unknown source type: ${sourceType}`);
+    }
 
     // Get the shared buffer to reuse later
     sharedBuffer = audioSource.get_shared_buffer();
@@ -119,10 +161,11 @@ async function initWorker(sampleRate) {
     self.postMessage({
       type: 'initialized',
       success: true,
-      sharedBuffer
+      sharedBuffer,
+      sourceType
     });
 
-    console.log('Audio engine worker initialized successfully');
+    console.log(`Audio engine worker initialized successfully with source type: ${sourceType}`);
 
     // Process any pending operations
     processPendingOperations();
@@ -181,10 +224,10 @@ function startAudioEngine() {
 
     processorIntervalId = setInterval(() => {
       if (audioSource) {
-        // Process 256 samples at a time
-        audioSource.process(256);
+        // Process FRAME_SIZE * 8 samples at a time
+        audioSource.process(960 * 8);
       }
-    }, 2); // Process every 2ms
+    }, 100); // Process every 2ms
 
     // Send success message with the shared buffer
     self.postMessage({
@@ -241,16 +284,49 @@ function setFrequency(frequency) {
       throw new Error('Audio engine not initialized');
     }
 
-    audioSource.set_frequency(frequency);
+    // Only set frequency if we're using an oscillator
+    if (sourceType === 'oscillator') {
+      audioSource.set_frequency(frequency);
 
-    self.postMessage({
-      type: 'frequencySet',
-      success: true
-    });
+      self.postMessage({
+        type: 'frequencySet',
+        success: true
+      });
+    } else {
+      throw new Error('Cannot set frequency on non-oscillator source');
+    }
   } catch (error) {
     console.error('Failed to set oscillator frequency:', error);
     self.postMessage({
       type: 'frequencySet',
+      success: false,
+      error: error.message
+    });
+  }
+}
+
+// Reset the audio source (for opus player)
+function resetAudioSource() {
+  try {
+    if (!isInitialized || !audioSource) {
+      throw new Error('Audio engine not initialized');
+    }
+
+    // Only reset if we're using an opus player
+    if (sourceType === 'opusPlayer') {
+      audioSource.reset();
+
+      self.postMessage({
+        type: 'reset',
+        success: true
+      });
+    } else {
+      throw new Error('Cannot reset non-opus player source');
+    }
+  } catch (error) {
+    console.error('Failed to reset audio source:', error);
+    self.postMessage({
+      type: 'reset',
       success: false,
       error: error.message
     });

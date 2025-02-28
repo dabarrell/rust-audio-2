@@ -32,6 +32,7 @@ pub trait Source {
 #[derive(Clone)]
 pub enum SourceType {
     Oscillator,
+    OpusPlayer,
     // Add more source types here as they are implemented
     // Example: SamplePlayer,
     // Example: NoiseGenerator,
@@ -57,6 +58,19 @@ impl AudioSource {
         Ok(AudioSource {
             source_type: SourceType::Oscillator,
             source: Box::new(oscillator),
+        })
+    }
+
+    // Create a new opus player source
+    #[wasm_bindgen(js_name = createOpusPlayer)]
+    pub fn create_opus_player(sample_rate: f32) -> Result<AudioSource, JsValue> {
+        use crate::opus_source::OpusSource;
+
+        let opus_source = OpusSource::new(sample_rate)?;
+
+        Ok(AudioSource {
+            source_type: SourceType::OpusPlayer,
+            source: Box::new(opus_source),
         })
     }
 
@@ -110,6 +124,74 @@ impl AudioSource {
             // Add more source types here as they are implemented
             _ => Err(JsValue::from_str(
                 "This source type does not support set_frequency",
+            )),
+        }
+    }
+
+    // Load an audio file (only for opus player type)
+    #[wasm_bindgen(js_name = loadAudioFile)]
+    pub async fn load_audio_file(&mut self, file: web_sys::File) -> Result<(), JsValue> {
+        match self.source_type {
+            SourceType::OpusPlayer => {
+                // Downcast to OpusSource and load the file
+                if let Some(opus_source) = self
+                    .source
+                    .as_mut()
+                    .as_any_mut()
+                    .downcast_mut::<crate::opus_source::OpusSource>()
+                {
+                    opus_source.load_file(file).await
+                } else {
+                    Err(JsValue::from_str("Failed to downcast to OpusSource"))
+                }
+            }
+            // Add more source types here as they are implemented
+            _ => Err(JsValue::from_str(
+                "This source type does not support loading audio files",
+            )),
+        }
+    }
+
+    // Reset playback position (only for opus player type)
+    pub fn reset(&mut self) -> Result<(), JsValue> {
+        match self.source_type {
+            SourceType::OpusPlayer => {
+                // Downcast to OpusSource and reset
+                if let Some(opus_source) = self
+                    .source
+                    .as_mut()
+                    .as_any_mut()
+                    .downcast_mut::<crate::opus_source::OpusSource>()
+                {
+                    opus_source.reset();
+                    Ok(())
+                } else {
+                    Err(JsValue::from_str("Failed to downcast to OpusSource"))
+                }
+            }
+            // Add more source types here as they are implemented
+            _ => Err(JsValue::from_str("This source type does not support reset")),
+        }
+    }
+
+    // Check if a file is loaded (only for opus player type)
+    pub fn is_file_loaded(&self) -> Result<bool, JsValue> {
+        match self.source_type {
+            SourceType::OpusPlayer => {
+                // Downcast to OpusSource and check if file is loaded
+                if let Some(opus_source) = self
+                    .source
+                    .as_any()
+                    .downcast_ref::<crate::opus_source::OpusSource>()
+                {
+                    Ok(opus_source.is_file_loaded())
+                } else {
+                    Err(JsValue::from_str("Failed to downcast to OpusSource"))
+                }
+            }
+            // Add more source types here as they are implemented
+            _ => Err(JsValue::from_str(
+                "This source type does not support is_file_loaded",
             )),
         }
     }

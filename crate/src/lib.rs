@@ -1,13 +1,18 @@
+mod debug;
+mod opus_mixer;
+mod opus_source;
 mod oscillator;
 mod ring_buffer;
 mod source;
 mod utils;
 
+use debug::set_debug;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{AudioContext, AudioWorkletNode};
 
 // Re-export the ring buffer and oscillator modules
+pub use opus_source::OpusSource;
 pub use oscillator::Oscillator;
 pub use ring_buffer::{get_buffer_size, get_metadata_size, RingBuffer};
 pub use source::{AudioSource, SourceType};
@@ -30,6 +35,7 @@ pub struct AudioEngineInterface {
     is_initialized: bool,
     pending_operations: Vec<PendingOperation>,
     audio_file_callback: Option<js_sys::Function>,
+    source_type: String,
 }
 
 // Define an enum for pending operations
@@ -44,6 +50,7 @@ impl AudioEngineInterface {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Result<AudioEngineInterface, JsValue> {
         utils::set_panic_hook();
+        set_debug(true);
 
         // Create a new audio context
         let context = AudioContext::new()?;
@@ -56,7 +63,14 @@ impl AudioEngineInterface {
             is_initialized: false,
             pending_operations: Vec::new(),
             audio_file_callback: None,
+            source_type: "oscillator".to_string(), // Default to oscillator
         })
+    }
+
+    // Set the source type before initialization
+    pub fn set_source_type(&mut self, source_type: &str) {
+        self.source_type = source_type.to_string();
+        log(&format!("Source type set to: {}", source_type));
     }
 
     pub async fn init(&mut self) -> Result<(), JsValue> {
@@ -226,6 +240,14 @@ impl AudioEngineInterface {
             &"sampleRate".into(),
             &JsValue::from_f64(self.context.sample_rate() as f64),
         )?;
+
+        // Pass the source type to the worker
+        js_sys::Reflect::set(
+            &init_data,
+            &"sourceType".into(),
+            &JsValue::from_str(&self.source_type),
+        )?;
+
         js_sys::Reflect::set(&init_msg, &"data".into(), &init_data)?;
 
         worker.post_message(&init_msg)?;
@@ -346,6 +368,26 @@ impl AudioEngineInterface {
     pub fn set_audio_file_callback(&mut self, callback: js_sys::Function) {
         self.audio_file_callback = Some(callback);
         log("Audio file callback registered");
+    }
+
+    // Reset the audio source (for opus player)
+    pub fn reset(&self) -> Result<(), JsValue> {
+        if !self.is_initialized {
+            return Err(JsValue::from_str("Audio engine not initialized"));
+        }
+
+        if let Some(worker) = &self.worker {
+            let msg = js_sys::Object::new();
+            js_sys::Reflect::set(&msg, &"type".into(), &"reset".into())?;
+            worker.post_message(&msg)?;
+        }
+
+        Ok(())
+    }
+
+    // Get the current source type
+    pub fn get_source_type(&self) -> String {
+        self.source_type.clone()
     }
 }
 

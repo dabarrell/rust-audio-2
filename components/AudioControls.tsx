@@ -18,7 +18,13 @@ interface AudioEngineInterface {
   suspend(): Promise<void>;
   send_audio_file(file: File): Promise<void>;
   set_audio_file_callback(callback: (event: AudioFileEvent) => void): void;
+  set_source_type(sourceType: string): void;
+  get_source_type(): string;
+  reset(): Promise<void>;
 }
+
+// Define the available source types
+type SourceType = 'oscillator' | 'opusPlayer';
 
 function AudioControls() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -29,6 +35,8 @@ function AudioControls() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileStatus, setFileStatus] = useState<string | null>(null);
+  const [sourceType, setSourceType] = useState<SourceType>('oscillator');
+  const [needsReinitialization, setNeedsReinitialization] = useState(false);
 
   // TODO: This doesn't work with Strict Mode - fix it then re-enable
 
@@ -46,6 +54,9 @@ function AudioControls() {
         // Use type assertion to tell TypeScript about the AudioEngineInterface constructor
         const AudioEngineInterfaceClass = wasmImport.AudioEngineInterface as unknown as { new(): AudioEngineInterface };
         const engine = new AudioEngineInterfaceClass();
+
+        // Set the source type before initialization
+        engine.set_source_type(sourceType);
 
         // Initialize the audio engine
         await engine.init();
@@ -79,6 +90,26 @@ function AudioControls() {
       loadWasm();
     }
 
+    // If source type changes, we need to reinitialize
+    if (needsReinitialization && !isLoading) {
+      // Clean up the old engine first
+      if (audioEngineRef.current) {
+        try {
+          audioEngineRef.current.suspend().catch((err: Error) => {
+            console.error('Error during cleanup:', err);
+          });
+        } catch (err) {
+          console.error('Error during cleanup:', err);
+        }
+      }
+
+      // Reset state
+      setIsInitialized(false);
+      setIsPlaying(false);
+      setNeedsReinitialization(false);
+      audioEngineRef.current = null;
+    }
+
     // Cleanup function
     return () => {
       if (audioEngineRef.current) {
@@ -91,7 +122,7 @@ function AudioControls() {
         }
       }
     };
-  }, [isInitialized, isLoading]);
+  }, [isInitialized, isLoading, sourceType, needsReinitialization]);
 
   const handlePlayPause = async () => {
     if (!audioEngineRef.current) return;
@@ -113,7 +144,7 @@ function AudioControls() {
     const newFrequency = parseInt(e.target.value, 10);
     setFrequency(newFrequency);
 
-    if (audioEngineRef.current) {
+    if (audioEngineRef.current && sourceType === 'oscillator') {
       try {
         audioEngineRef.current.set_frequency(newFrequency);
       } catch (err) {
@@ -154,6 +185,26 @@ function AudioControls() {
     }
   };
 
+  const handleReset = async () => {
+    if (!audioEngineRef.current) {
+      return;
+    }
+
+    try {
+      await audioEngineRef.current.reset();
+      setFileStatus('Playback position reset to beginning');
+    } catch (err) {
+      console.error('Error resetting playback:', err);
+      setFileStatus(`Error: ${err instanceof Error ? err.message : 'Failed to reset playback'}`);
+    }
+  };
+
+  const handleSourceTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newSourceType = e.target.value as SourceType;
+    setSourceType(newSourceType);
+    setNeedsReinitialization(true);
+  };
+
   if (error) {
     return (
       <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded">
@@ -171,6 +222,21 @@ function AudioControls() {
       ) : (
         <>
           <div className="mb-4">
+            <label className="block mb-2 font-medium">
+              Source Type:
+            </label>
+            <select
+              value={sourceType}
+              onChange={handleSourceTypeChange}
+              disabled={isPlaying}
+              className="w-full p-2 border rounded"
+            >
+              <option value="oscillator">Oscillator</option>
+              <option value="opusPlayer">Opus Player</option>
+            </select>
+          </div>
+
+          <div className="mb-4">
             <button
               onClick={handlePlayPause}
               disabled={!isInitialized}
@@ -183,53 +249,65 @@ function AudioControls() {
             </button>
           </div>
 
-          <div className="mb-4">
-            <label className="block mb-2">
-              Frequency: {frequency} Hz
-            </label>
-            <input
-              type="range"
-              min="20"
-              max="2000"
-              value={frequency}
-              onChange={handleFrequencyChange}
-              disabled={!isInitialized || !isPlaying}
-              className="w-full"
-            />
-          </div>
-
-          <div className="mb-4 mt-8 border-t pt-4">
-            <h3 className="text-lg font-semibold mb-2">Audio File Loader</h3>
-            <div className="mb-2">
+          {sourceType === 'oscillator' && (
+            <div className="mb-4">
+              <label className="block mb-2">
+                Frequency: {frequency} Hz
+              </label>
               <input
-                type="file"
-                accept="audio/*"
-                onChange={handleFileChange}
-                className="block w-full text-sm text-gray-500
-                  file:mr-4 file:py-2 file:px-4
-                  file:rounded file:border-0
-                  file:text-sm file:font-semibold
-                  file:bg-blue-50 file:text-blue-700
-                  hover:file:bg-blue-100"
+                type="range"
+                min="20"
+                max="2000"
+                value={frequency}
+                onChange={handleFrequencyChange}
+                disabled={!isInitialized || !isPlaying}
+                className="w-full"
               />
             </div>
+          )}
 
-            <div className="mb-2">
-              <button
-                onClick={handleSendFile}
-                disabled={!selectedFile || !isInitialized}
-                className="px-4 py-2 rounded bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Send to Audio Engine
-              </button>
-            </div>
-
-            {fileStatus && (
-              <div className={`mt-2 p-2 rounded text-sm ${fileStatus.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
-                {fileStatus}
+          {sourceType === 'opusPlayer' && (
+            <div className="mb-4 mt-8 border-t pt-4">
+              <h3 className="text-lg font-semibold mb-2">Audio File Loader</h3>
+              <div className="mb-2">
+                <input
+                  type="file"
+                  accept="audio/*"
+                  onChange={handleFileChange}
+                  className="block w-full text-sm text-gray-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-blue-50 file:text-blue-700
+                    hover:file:bg-blue-100"
+                />
               </div>
-            )}
-          </div>
+
+              <div className="mb-2 flex space-x-2">
+                <button
+                  onClick={handleSendFile}
+                  disabled={!selectedFile || !isInitialized}
+                  className="px-4 py-2 rounded bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Send to Audio Engine
+                </button>
+
+                <button
+                  onClick={handleReset}
+                  disabled={!isInitialized}
+                  className="px-4 py-2 rounded bg-gray-500 hover:bg-gray-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Reset Playback
+                </button>
+              </div>
+
+              {fileStatus && (
+                <div className={`mt-2 p-2 rounded text-sm ${fileStatus.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                  {fileStatus}
+                </div>
+              )}
+            </div>
+          )}
 
           {!isInitialized && !isLoading && (
             <p className="text-gray-500">Initializing audio engine...</p>
