@@ -1,8 +1,16 @@
+mod oscillator;
+mod ring_buffer;
 mod utils;
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{AudioContext, AudioWorkletNode};
+
+// Re-export the ring buffer and oscillator modules
+pub use oscillator::Oscillator;
+pub use ring_buffer::{get_buffer_size, get_metadata_size, RingBuffer};
 
 #[wasm_bindgen]
 extern "C" {
@@ -13,9 +21,12 @@ extern "C" {
 }
 
 #[wasm_bindgen]
+#[derive(Clone)]
 pub struct AudioEngine {
     context: AudioContext,
     oscillator_node: Option<AudioWorkletNode>,
+    oscillator: Option<Rc<RefCell<Oscillator>>>,
+    processor_interval_id: Option<i32>,
 }
 
 #[wasm_bindgen]
@@ -30,6 +41,8 @@ impl AudioEngine {
         Ok(AudioEngine {
             context,
             oscillator_node: None,
+            oscillator: None,
+            processor_interval_id: None,
         })
     }
 
@@ -43,42 +56,93 @@ impl AudioEngine {
 
         log("Audio worklet module loaded successfully");
 
-        // Create the oscillator node
-        let oscillator_options = web_sys::AudioWorkletNodeOptions::new();
-        let oscillator_node = AudioWorkletNode::new_with_options(
-            &self.context,
-            "oscillator-processor",
-            &oscillator_options,
-        )?;
+        // Create the oscillator
+        let sample_rate = self.context.sample_rate() as f32;
+        let oscillator = Oscillator::new(sample_rate)?;
+
+        // Get the shared buffer
+        let shared_buffer = oscillator.get_shared_buffer();
+
+        // Create the oscillator node with the shared buffer
+        let options = web_sys::AudioWorkletNodeOptions::new();
+        let processor_options = js_sys::Object::new();
+
+        // Pass the shared buffer to the processor
+        js_sys::Reflect::set(&processor_options, &"sharedBuffer".into(), &shared_buffer)?;
+        options.set_processor_options(Some(&processor_options));
+
+        let oscillator_node =
+            AudioWorkletNode::new_with_options(&self.context, "oscillator-processor", &options)?;
 
         // Connect the oscillator to the audio output
         oscillator_node.connect_with_audio_node(&self.context.destination())?;
 
+        // Store the oscillator and node
+        let oscillator = Rc::new(RefCell::new(oscillator));
+        self.oscillator = Some(oscillator.clone());
         self.oscillator_node = Some(oscillator_node);
+
+        // Set up an interval to process audio samples
+        let window = web_sys::window().expect("no global window exists");
+        let oscillator_clone = oscillator.clone();
+
+        // Create a closure that will be called periodically to process audio
+        let closure = Closure::wrap(Box::new(move || {
+            if let Ok(mut osc) = oscillator_clone.try_borrow_mut() {
+                // Process 128 samples at a time (common audio buffer size)
+                let _ = osc.process(128);
+            }
+        }) as Box<dyn FnMut()>);
+
+        // Set up the interval (process every 10ms)
+        let interval_id = window.set_interval_with_callback_and_timeout_and_arguments_0(
+            closure.as_ref().unchecked_ref(),
+            10,
+        )?;
+
+        // Forget the closure so it's not dropped
+        closure.forget();
+
+        self.processor_interval_id = Some(interval_id);
 
         Ok(())
     }
 
     pub fn set_frequency(&self, frequency: f32) -> Result<(), JsValue> {
-        if let Some(node) = &self.oscillator_node {
-            let message = js_sys::Object::new();
-            js_sys::Reflect::set(&message, &"type".into(), &"setFrequency".into())?;
-            js_sys::Reflect::set(&message, &"frequency".into(), &frequency.into())?;
-
-            let port = node.port()?;
-            port.post_message(&message)?;
+        if let Some(oscillator) = &self.oscillator {
+            if let Ok(mut osc) = oscillator.try_borrow_mut() {
+                osc.set_frequency(frequency);
+            }
         }
 
         Ok(())
     }
 
     pub async fn resume(&self) -> Result<(), JsValue> {
+        // Resume the audio context
         JsFuture::from(self.context.resume()?).await?;
+
+        // Start the oscillator
+        if let Some(oscillator) = &self.oscillator {
+            if let Ok(mut osc) = oscillator.try_borrow_mut() {
+                osc.start();
+            }
+        }
+
         Ok(())
     }
 
     pub async fn suspend(&self) -> Result<(), JsValue> {
+        // Stop the oscillator
+        if let Some(oscillator) = &self.oscillator {
+            if let Ok(mut osc) = oscillator.try_borrow_mut() {
+                osc.stop();
+            }
+        }
+
+        // Suspend the audio context
         JsFuture::from(self.context.suspend()?).await?;
+
         Ok(())
     }
 }

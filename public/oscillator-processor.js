@@ -1,45 +1,76 @@
-// Audio worklet processor for a simple oscillator
+// Audio worklet processor for reading from a shared buffer
 class OscillatorProcessor extends AudioWorkletProcessor {
-  constructor() {
+  constructor(options) {
     super();
-    this.phase = 0;
-    this.frequency = 440; // Default frequency in Hz
 
-    // Handle messages from the main thread
-    this.port.onmessage = (event) => {
-      if (event.data.type === 'setFrequency') {
-        this.frequency = event.data.frequency;
-      }
-    };
+    // Default values
+    this.isInitialized = false;
+    this.readPtr = 0;
+    this.writePtr = 0;
+    this.bufferSize = 0;
+    this.metadataSize = 4; // [readPtr, writePtr, unused, unused]
+
+    // Check if we have options with a shared buffer
+    if (options && options.processorOptions && options.processorOptions.sharedBuffer) {
+      // Get the shared buffer
+      this.sharedBuffer = options.processorOptions.sharedBuffer;
+
+      // Create a Float32Array view of the buffer
+      this.bufferView = new Float32Array(this.sharedBuffer);
+
+      // Get the buffer size (excluding metadata)
+      this.bufferSize = this.bufferView.length - this.metadataSize;
+
+      // Initialize
+      this.isInitialized = true;
+
+      console.log(`OscillatorProcessor initialized with buffer size: ${this.bufferSize}`);
+    } else {
+      console.error('OscillatorProcessor: No shared buffer provided');
+    }
   }
 
-  process(inputs, outputs, parameters) {
+  process(inputs, outputs) {
+    // If not initialized, output silence
+    if (!this.isInitialized) {
+      return true;
+    }
+
     const output = outputs[0];
-    const sampleRate = 44100; // Standard sample rate
 
-    // Use parameters if provided, otherwise use the instance property
-    const frequency = parameters.frequency ? parameters.frequency[0] : this.frequency;
+    // Read the current write pointer from the shared buffer
+    this.writePtr = this.bufferView[1];
 
-    // Calculate the phase increment per sample
-    const phaseIncrement = 2 * Math.PI * frequency / sampleRate;
+    // Calculate available samples to read
+    let available = 0;
+    if (this.writePtr >= this.readPtr) {
+      available = this.writePtr - this.readPtr;
+    } else {
+      available = this.bufferSize - this.readPtr + this.writePtr;
+    }
 
-    // Fill all output channels with the oscillator signal
+    // Fill all output channels
     for (let channel = 0; channel < output.length; channel++) {
       const outputChannel = output[channel];
 
       for (let i = 0; i < outputChannel.length; i++) {
-        // Generate a sine wave
-        outputChannel[i] = Math.sin(this.phase);
+        if (available > 0) {
+          // Read a sample from the buffer
+          const bufferIdx = (this.readPtr % this.bufferSize) + this.metadataSize;
+          outputChannel[i] = this.bufferView[bufferIdx];
 
-        // Increment the phase for the next sample
-        this.phase += phaseIncrement;
-
-        // Keep the phase in the range [0, 2π]
-        if (this.phase > 2 * Math.PI) {
-          this.phase -= 2 * Math.PI;
+          // Increment the read pointer
+          this.readPtr = (this.readPtr + 1) % this.bufferSize;
+          available--;
+        } else {
+          // No more samples available, output silence
+          outputChannel[i] = 0;
         }
       }
     }
+
+    // Update the read pointer in the shared buffer
+    this.bufferView[0] = this.readPtr;
 
     // Return true to keep the processor running
     return true;

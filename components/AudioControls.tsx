@@ -24,7 +24,6 @@ function AudioControls() {
         setIsLoading(true);
 
         // Dynamically import the WASM module
-        // The path is relative to the public directory
         const wasmImport = await import('../public/wasm/wasm_pack_test_27_feb.js');
         await wasmImport.default();
 
@@ -103,7 +102,7 @@ function AudioControls() {
 
   return (
     <div className="p-4 border rounded-lg shadow-sm">
-      <h2 className="text-xl font-bold mb-4">Web Audio API Oscillator</h2>
+      <h2 className="text-xl font-bold mb-4">Rust WASM Oscillator</h2>
 
       {isLoading ? (
         <p className="text-gray-500">Loading WASM module...</p>
