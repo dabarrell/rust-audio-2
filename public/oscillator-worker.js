@@ -34,6 +34,29 @@ self.onmessage = async (event) => {
       await initWorker(data.sampleRate);
       break;
 
+    case 'loadAudioFile':
+      // Handle the audio file data
+      if (data && data.file) {
+        console.log('Received audio file in worker:', data.file.name);
+        console.log('File type:', data.file.type);
+        console.log('File size:', data.file.size, 'bytes');
+
+        // Send acknowledgment back to main thread
+        self.postMessage({
+          type: 'audioFileReceived',
+          success: true,
+          fileName: data.file.name
+        });
+      } else {
+        console.error('Invalid audio file data received');
+        self.postMessage({
+          type: 'audioFileReceived',
+          success: false,
+          error: 'Invalid audio file data'
+        });
+      }
+      break;
+
     case 'start':
       // Queue the operation if not initialized
       if (!isInitialized) {

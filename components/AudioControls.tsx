@@ -2,12 +2,22 @@
 
 import { useEffect, useState, useRef } from 'react';
 
+// Define the audio file event type
+interface AudioFileEvent {
+  type: string;
+  success: boolean;
+  fileName?: string;
+  error?: string;
+}
+
 // We'll need to define the AudioEngine type since TypeScript doesn't know about it
 interface AudioEngine {
   init(): Promise<void>;
   set_frequency(frequency: number): void;
   resume(): Promise<void>;
   suspend(): Promise<void>;
+  send_audio_file(file: File): Promise<void>;
+  set_audio_file_callback(callback: (event: AudioFileEvent) => void): void;
 }
 
 function AudioControls() {
@@ -17,6 +27,8 @@ function AudioControls() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileStatus, setFileStatus] = useState<string | null>(null);
 
   // TODO: This doesn't work with Strict Mode - fix it then re-enable
 
@@ -37,6 +49,19 @@ function AudioControls() {
 
         // Initialize the audio engine
         await engine.init();
+
+        // Register the audio file callback
+        engine.set_audio_file_callback((event) => {
+          const { type, success, fileName, error } = event;
+
+          if (type === 'audioFileReceived') {
+            if (success) {
+              setFileStatus(`File "${fileName}" successfully processed by worker`);
+            } else {
+              setFileStatus(`Error: ${error || 'Failed to process audio file'}`);
+            }
+          }
+        });
 
         // Store the engine in the ref
         audioEngineRef.current = engine;
@@ -97,6 +122,38 @@ function AudioControls() {
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+
+      // Check if it's an audio file
+      if (!file.type.startsWith('audio/')) {
+        setFileStatus('Error: Please select an audio file');
+        setSelectedFile(null);
+        return;
+      }
+
+      setSelectedFile(file);
+      setFileStatus(`File "${file.name}" selected`);
+    }
+  };
+
+  const handleSendFile = async () => {
+    if (!selectedFile || !audioEngineRef.current) {
+      setFileStatus('Error: No file selected or audio engine not initialized');
+      return;
+    }
+
+    try {
+      // Send the file to the worker through the AudioEngine
+      await audioEngineRef.current.send_audio_file(selectedFile);
+      setFileStatus('Sending file to worker...');
+    } catch (err) {
+      console.error('Error sending file to worker:', err);
+      setFileStatus(`Error: ${err instanceof Error ? err.message : 'Failed to send file'}`);
+    }
+  };
+
   if (error) {
     return (
       <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded">
@@ -139,6 +196,39 @@ function AudioControls() {
               disabled={!isInitialized || !isPlaying}
               className="w-full"
             />
+          </div>
+
+          <div className="mb-4 mt-8 border-t pt-4">
+            <h3 className="text-lg font-semibold mb-2">Audio File Loader</h3>
+            <div className="mb-2">
+              <input
+                type="file"
+                accept="audio/*"
+                onChange={handleFileChange}
+                className="block w-full text-sm text-gray-500
+                  file:mr-4 file:py-2 file:px-4
+                  file:rounded file:border-0
+                  file:text-sm file:font-semibold
+                  file:bg-blue-50 file:text-blue-700
+                  hover:file:bg-blue-100"
+              />
+            </div>
+
+            <div className="mb-2">
+              <button
+                onClick={handleSendFile}
+                disabled={!selectedFile || !isInitialized}
+                className="px-4 py-2 rounded bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Send to Worker
+              </button>
+            </div>
+
+            {fileStatus && (
+              <div className={`mt-2 p-2 rounded text-sm ${fileStatus.startsWith('Error') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                {fileStatus}
+              </div>
+            )}
           </div>
 
           {!isInitialized && !isLoading && (

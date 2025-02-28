@@ -27,6 +27,7 @@ pub struct AudioEngine {
     worker: Option<web_sys::Worker>,
     is_initialized: bool,
     pending_operations: Vec<PendingOperation>,
+    audio_file_callback: Option<js_sys::Function>,
 }
 
 // Define an enum for pending operations
@@ -52,6 +53,7 @@ impl AudioEngine {
             worker: None,
             is_initialized: false,
             pending_operations: Vec::new(),
+            audio_file_callback: None,
         })
     }
 
@@ -186,6 +188,23 @@ impl AudioEngine {
                         log("Failed to set frequency");
                     }
                 }
+                "audioFileReceived" => {
+                    if success {
+                        log("Audio file received by worker successfully");
+                    } else {
+                        log("Failed to process audio file in worker");
+                    }
+
+                    // Call the registered callback if available
+                    unsafe {
+                        if !engine_ptr.is_null() {
+                            let engine = &mut *engine_ptr;
+                            if let Some(callback) = &engine.audio_file_callback {
+                                let _ = callback.call1(&JsValue::NULL, &js_obj);
+                            }
+                        }
+                    }
+                }
                 _ => {
                     log(&format!("Unknown message type: {}", type_str));
                 }
@@ -249,6 +268,44 @@ impl AudioEngine {
         Ok(())
     }
 
+    // Method to get the worker reference for direct communication
+    pub fn get_worker(&self) -> Option<web_sys::Worker> {
+        self.worker.clone()
+    }
+
+    // Method to send an audio file to the worker
+    pub fn send_audio_file(&self, file: JsValue) -> Result<(), JsValue> {
+        if !self.is_initialized {
+            log("Cannot send audio file - engine not initialized");
+            return Err(JsValue::from_str("Audio engine not initialized"));
+        }
+
+        if let Some(worker) = &self.worker {
+            let msg = js_sys::Object::new();
+            js_sys::Reflect::set(&msg, &"type".into(), &"loadAudioFile".into())?;
+
+            let data = js_sys::Object::new();
+            js_sys::Reflect::set(&data, &"file".into(), &file)?;
+            js_sys::Reflect::set(&msg, &"data".into(), &data)?;
+
+            // Get file name if possible
+            let file_name = if js_sys::Reflect::has(&file, &"name".into())? {
+                js_sys::Reflect::get(&file, &"name".into())?
+                    .as_string()
+                    .unwrap_or_else(|| "unknown".to_string())
+            } else {
+                "unknown".to_string()
+            };
+
+            log(&format!("Sending audio file '{}' to worker", file_name));
+            worker.post_message(&msg)?;
+        } else {
+            return Err(JsValue::from_str("Worker not available"));
+        }
+
+        Ok(())
+    }
+
     pub async fn resume(&mut self) -> Result<(), JsValue> {
         // Resume the audio context
         JsFuture::from(self.context.resume()?).await?;
@@ -281,6 +338,12 @@ impl AudioEngine {
         JsFuture::from(self.context.suspend()?).await?;
 
         Ok(())
+    }
+
+    // Method to register a callback for audio file events
+    pub fn set_audio_file_callback(&mut self, callback: js_sys::Function) {
+        self.audio_file_callback = Some(callback);
+        log("Audio file callback registered");
     }
 }
 
