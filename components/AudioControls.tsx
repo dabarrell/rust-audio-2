@@ -33,7 +33,6 @@ function AudioControls() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileStatus, setFileStatus] = useState<string | null>(null);
   const [sourceType, setSourceType] = useState<SourceType>('oscillator');
   const [needsReinitialization, setNeedsReinitialization] = useState(false);
@@ -153,35 +152,30 @@ function AudioControls() {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
 
       // Check if it's an audio file
       if (!file.type.startsWith('audio/')) {
         setFileStatus('Error: Please select an audio file');
-        setSelectedFile(null);
         return;
       }
 
-      setSelectedFile(file);
-      setFileStatus(`File "${file.name}" selected`);
-    }
-  };
+      setFileStatus(`File "${file.name}" selected, sending to audio engine...`);
 
-  const handleSendFile = async () => {
-    if (!selectedFile || !audioEngineRef.current) {
-      setFileStatus('Error: No file selected or audio engine not initialized');
-      return;
-    }
-
-    try {
-      // Send the file to the worker through the AudioEngine
-      await audioEngineRef.current.send_audio_file(selectedFile);
-      setFileStatus('Sending file to worker...');
-    } catch (err) {
-      console.error('Error sending file to worker:', err);
-      setFileStatus(`Error: ${err instanceof Error ? err.message : 'Failed to send file'}`);
+      // Automatically send the file to the audio engine
+      if (audioEngineRef.current) {
+        try {
+          await audioEngineRef.current.send_audio_file(file);
+          setFileStatus(`File "${file.name}" sent to audio engine`);
+        } catch (err) {
+          console.error('Error sending file to worker:', err);
+          setFileStatus(`Error: ${err instanceof Error ? err.message : 'Failed to send file'}`);
+        }
+      } else {
+        setFileStatus('Error: Audio engine not initialized');
+      }
     }
   };
 
@@ -270,6 +264,9 @@ function AudioControls() {
             <div className="mb-4 mt-8 border-t pt-4">
               <h3 className="text-lg font-semibold mb-2">Audio File Loader</h3>
               <div className="mb-2">
+                <label className="block mb-2 text-sm text-gray-700">
+                  Select an audio file to play (file will be sent automatically):
+                </label>
                 <input
                   type="file"
                   accept="audio/*"
@@ -283,15 +280,7 @@ function AudioControls() {
                 />
               </div>
 
-              <div className="mb-2 flex space-x-2">
-                <button
-                  onClick={handleSendFile}
-                  disabled={!selectedFile || !isInitialized}
-                  className="px-4 py-2 rounded bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Send to Audio Engine
-                </button>
-
+              <div className="mb-2">
                 <button
                   onClick={handleReset}
                   disabled={!isInitialized}
