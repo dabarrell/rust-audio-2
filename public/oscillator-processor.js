@@ -19,7 +19,7 @@ class OscillatorProcessor extends AudioWorkletProcessor {
       this.bufferView = new Float32Array(this.sharedBuffer);
 
       // Get the buffer size (excluding metadata)
-      this.bufferSize = this.bufferView.length - this.metadataSize;
+      this.bufferSize = this.bufferView.length - 4;
 
       // Initialize
       this.isInitialized = true;
@@ -77,5 +77,10 @@ class OscillatorProcessor extends AudioWorkletProcessor {
   }
 }
 
-// Register the processor
-registerProcessor('oscillator-processor', OscillatorProcessor);
+try {
+  console.log('OscillatorProcessor registering...');
+  registerProcessor('oscillator-processor', OscillatorProcessor);
+  console.log('OscillatorProcessor registered');
+} catch (error) {
+  console.error('Failed to register OscillatorProcessor:', error);
+}

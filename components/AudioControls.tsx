@@ -16,18 +16,19 @@ function AudioControls() {
   const audioEngineRef = useRef<AudioEngine | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // TODO: This doesn't work with Strict Mode - fix it then re-enable
 
   useEffect(() => {
     const loadWasm = async () => {
       try {
-        setIsLoading(true);
-
+        // setIsLoading(true);
         // Dynamically import the WASM module
         const wasmImport = await import('../public/wasm/wasm_pack_test_27_feb.js');
         await wasmImport.default();
 
-        setIsLoading(false);
+        console.log('WASM module loaded');
 
         // Create a new audio engine
         // Use type assertion to tell TypeScript about the AudioEngine constructor
@@ -39,6 +40,7 @@ function AudioControls() {
 
         // Store the engine in the ref
         audioEngineRef.current = engine;
+        setIsLoading(false);
         setIsInitialized(true);
       } catch (err) {
         console.error('Failed to initialize audio engine:', err);
@@ -47,7 +49,10 @@ function AudioControls() {
       }
     };
 
-    loadWasm();
+    if (!isInitialized && !isLoading) {
+      setIsLoading(true);
+      loadWasm();
+    }
 
     // Cleanup function
     return () => {
@@ -61,7 +66,7 @@ function AudioControls() {
         }
       }
     };
-  }, []);
+  }, [isInitialized, isLoading]);
 
   const handlePlayPause = async () => {
     if (!audioEngineRef.current) return;

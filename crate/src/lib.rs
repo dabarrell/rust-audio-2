@@ -47,6 +47,7 @@ impl AudioEngine {
     }
 
     pub async fn init(&mut self) -> Result<(), JsValue> {
+        log("Once");
         // Load the audio worklet processor
         let worklet = self.context.audio_worklet()?;
         let promise = worklet.add_module("/oscillator-processor.js")?;

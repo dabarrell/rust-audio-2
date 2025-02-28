@@ -3,6 +3,7 @@ import WasmPackPlugin from "@wasm-tool/wasm-pack-plugin";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  reactStrictMode: false,
   webpack: (config, { isServer }) => {
     config.experiments = {
       ...config.experiments,
