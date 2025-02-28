@@ -40,6 +40,14 @@ impl OpusSource {
         Ok(())
     }
 
+    pub async fn load_files(&mut self, files: Vec<File>) -> Result<(), JsValue> {
+        // Create a new mixer with multiple files, starting at timestamp 0.0
+        self.mixer = Some(AudioMixer::new(files, 0.0).await?);
+        self.file_loaded = true;
+
+        Ok(())
+    }
+
     pub fn reset(&mut self) {
         if let Some(mixer) = &mut self.mixer {
             // Reset the mixer by seeking to the start timestamp

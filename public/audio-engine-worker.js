@@ -83,6 +83,59 @@ self.onmessage = async (event) => {
       }
       break;
 
+    case 'loadAudioFiles':
+      // Handle multiple audio files
+      if (data && data.files && data.files.length > 0) {
+        const fileCount = data.files.length;
+        console.log(`Received ${fileCount} audio files in worker`);
+
+        try {
+          // Convert FileList to array for easier handling
+          const filesArray = Array.from(data.files);
+
+          // Check if all files are valid
+          for (const file of filesArray) {
+            if (!file.type.startsWith('audio/')) {
+              throw new Error(`File "${file.name}" is not an audio file`);
+            }
+          }
+
+          // Load the files into the audio source
+          if (audioSource && sourceType === 'opusPlayer') {
+            await audioSource.loadAudioFiles(filesArray);
+
+            // Get file names for the success message
+            const fileNames = filesArray.map(file => file.name).join(', ');
+
+            // Send success message back to main thread
+            self.postMessage({
+              type: 'audioFileReceived',
+              success: true,
+              fileName: `${fileCount} files: ${fileNames}`
+            });
+          } else {
+            throw new Error('Audio source not initialized or not an opus player');
+          }
+        } catch (error) {
+          console.error('Error loading audio files:', error);
+
+          // Send error message back to main thread
+          self.postMessage({
+            type: 'audioFileReceived',
+            success: false,
+            error: error.message || 'Failed to load audio files'
+          });
+        }
+      } else {
+        console.error('Invalid audio files data received');
+        self.postMessage({
+          type: 'audioFileReceived',
+          success: false,
+          error: 'Invalid audio files data'
+        });
+      }
+      break;
+
     case 'start':
       // Queue the operation if not initialized
       if (!isInitialized) {

@@ -330,6 +330,39 @@ impl AudioEngineInterface {
         Ok(())
     }
 
+    // Method to send multiple audio files to the worker
+    pub fn send_audio_files(&self, files: JsValue) -> Result<(), JsValue> {
+        if !self.is_initialized {
+            log("Cannot send audio files - engine not initialized");
+            return Err(JsValue::from_str("Audio engine not initialized"));
+        }
+
+        if let Some(worker) = &self.worker {
+            let msg = js_sys::Object::new();
+            js_sys::Reflect::set(&msg, &"type".into(), &"loadAudioFiles".into())?;
+
+            let data = js_sys::Object::new();
+            js_sys::Reflect::set(&data, &"files".into(), &files)?;
+            js_sys::Reflect::set(&msg, &"data".into(), &data)?;
+
+            // Get file count if possible
+            let file_count = if js_sys::Reflect::has(&files, &"length".into())? {
+                js_sys::Reflect::get(&files, &"length".into())?
+                    .as_f64()
+                    .unwrap_or(0.0) as usize
+            } else {
+                0
+            };
+
+            log(&format!("Sending {} audio files to worker", file_count));
+            worker.post_message(&msg)?;
+        } else {
+            return Err(JsValue::from_str("Worker not available"));
+        }
+
+        Ok(())
+    }
+
     pub async fn resume(&mut self) -> Result<(), JsValue> {
         // Resume the audio context
         JsFuture::from(self.context.resume()?).await?;

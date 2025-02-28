@@ -152,6 +152,39 @@ impl AudioSource {
         }
     }
 
+    // Load multiple audio files (only for opus player type)
+    #[wasm_bindgen(js_name = loadAudioFiles)]
+    pub async fn load_audio_files(&mut self, files_js: js_sys::Array) -> Result<(), JsValue> {
+        match self.source_type {
+            SourceType::OpusPlayer => {
+                // Downcast to OpusSource
+                if let Some(opus_source) = self
+                    .source
+                    .as_mut()
+                    .as_any_mut()
+                    .downcast_mut::<crate::opus_source::OpusSource>()
+                {
+                    // Convert JS array to Rust Vec<File>
+                    let mut files = Vec::with_capacity(files_js.length() as usize);
+                    for i in 0..files_js.length() {
+                        let file_js = files_js.get(i);
+                        let file: web_sys::File = file_js.dyn_into()?;
+                        files.push(file);
+                    }
+
+                    // Load the files
+                    opus_source.load_files(files).await
+                } else {
+                    Err(JsValue::from_str("Failed to downcast to OpusSource"))
+                }
+            }
+            // Add more source types here as they are implemented
+            _ => Err(JsValue::from_str(
+                "This source type does not support loading audio files",
+            )),
+        }
+    }
+
     // Reset playback position (only for opus player type)
     pub fn reset(&mut self) -> Result<(), JsValue> {
         match self.source_type {
