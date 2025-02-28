@@ -4,7 +4,7 @@ mod drift_stats;
 
 // Constants
 pub const SAMPLE_RATE: u32 = 48000; // Opus default sample rate
-pub const CHANNELS: u16 = 1; // MONO
+pub const CHANNELS: u16 = 2; // STEREO (always use stereo output)
 pub const FRAME_SIZE: usize = 960; // 20ms at 48kHz
 pub const RING_BUFFER_SIZE: usize = FRAME_SIZE * 8; // Store 8 frames worth of samples
 

@@ -55,10 +55,10 @@ impl Source for Oscillator {
 
         // Calculate how many samples we can write
         let available = self.ring_buffer.available_write();
-        let to_process = num_samples.min(available);
+        let to_process = num_samples.min(available / 2);
 
         // Generate samples
-        let mut samples = vec![0.0; to_process];
+        let mut samples = vec![0.0; to_process * 2];
 
         // Calculate the phase increment per sample
         let phase_increment = 2.0 * std::f32::consts::PI * self.frequency / self.sample_rate;
@@ -66,7 +66,9 @@ impl Source for Oscillator {
         // Generate sine wave samples
         for i in 0..to_process {
             // Generate a sine wave using libm's sinf (safe wrapper)
-            samples[i] = sinf(self.phase);
+            let sample = sinf(self.phase);
+            samples[i * 2] = sample;
+            samples[i * 2 + 1] = sample;
 
             // Increment the phase for the next sample
             self.phase += phase_increment;

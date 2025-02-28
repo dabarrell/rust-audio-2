@@ -1,6 +1,6 @@
 use crate::debug;
 use crate::opus_mixer::audio_mixer::AudioMixer;
-use crate::opus_mixer::{CHANNELS, FRAME_SIZE, SAMPLE_RATE};
+use crate::opus_mixer::{FRAME_SIZE, SAMPLE_RATE};
 use crate::ring_buffer::RingBuffer;
 use crate::source::Source;
 use std::any::Any;
@@ -75,44 +75,17 @@ impl Source for OpusSource {
         // Update the read pointer based on what JavaScript has read
         self.ring_buffer.update_read_ptr();
 
-        // Calculate how many samples we can write
-        // let available = self.ring_buffer.available_write();
-        // let to_process = num_samples.min(available);
-
-        // debug!(
-        //     "Processing {} to_process, {} num_samples {} available",
-        //     to_process, num_samples, available
-        // );
-
-        // let mut total_samples_written = 0;
-
-        // while total_samples_written < to_process {
-        //     if let Ok(Some(mixed_samples)) = mixer.mix_next_samples() {
-        //         // Write the mixed samples to the ring buffer
-        //         let samples_written = self.ring_buffer.write(mixed_samples);
-        //         total_samples_written += samples_written;
-
-        //         // If we couldn't write all samples, the buffer is full
-        //         if samples_written < mixed_samples.len() {
-        //             break;
-        //         }
-        //     } else {
-        //         // No more samples available or error occurred
-        //         break;
-        //     }
-        // }
-
-        // TODO: maybe arc mutex the buffer? or something?
+        // TODO: get rid of num_samples, and just fill the buffer each time
 
         // Calculate how many frames we need to process
-        // TODO: Why is this calculating the number of frames? check maths and int stuff
+        // Note: For stereo, each frame contains twice as many samples as mono
         let available_samples = self.ring_buffer.available_write();
         let mut frames_to_process = (num_samples + FRAME_SIZE - 1) / FRAME_SIZE;
-        let available_frames = available_samples / FRAME_SIZE;
+        let available_frames = available_samples / (FRAME_SIZE * 2); // Always 2 channels
         let mut total_samples_written = 0;
 
         debug!(
-            "Processing {} frames, {} requested samples, {} available samples, {} available frames",
+            "Processing {} frames, {} requested samples, {} available samples, {} available frames, 2 channels",
             frames_to_process, num_samples, available_samples, available_frames
         );
 

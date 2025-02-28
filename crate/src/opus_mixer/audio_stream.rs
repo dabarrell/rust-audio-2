@@ -23,6 +23,7 @@ pub struct AudioStream {
     pub(crate) current_granule_position: i64,
     pub(crate) drift_compensation: f32,
     pub(crate) drift_stats: DriftStats,
+    pub(crate) channel_count: u16, // Input channel count from the file header
 }
 
 impl fmt::Debug for AudioStream {
@@ -34,6 +35,7 @@ impl fmt::Debug for AudioStream {
             .field("current_granule_position", &self.current_granule_position)
             .field("drift_compensation", &self.drift_compensation)
             .field("drift_stats", &self.drift_stats)
+            .field("channel_count", &self.channel_count)
             .finish()
     }
 }
@@ -48,11 +50,12 @@ impl AudioStream {
             decoder: None,
             header_processed: false,
             comments_processed: false,
-            decoded_buffer: vec![0f32; FRAME_SIZE * CHANNELS as usize],
+            decoded_buffer: vec![0f32; FRAME_SIZE * CHANNELS as usize], // Initialize with stereo buffer size
             total_samples_decoded: 0,
             current_granule_position: 0,
             drift_compensation: 1.0,
             drift_stats: DriftStats::new(),
+            channel_count: 1, // Default to mono, will be updated from header
         })
     }
 
@@ -75,6 +78,20 @@ impl AudioStream {
                     if !self.header_processed {
                         if is_opus_header(&packet.data) {
                             debug!("Found OpusHead packet");
+
+                            // Parse the Opus header to get the channel count
+                            // OpusHead format: "OpusHead" (8 bytes) + version (1 byte) + channel_count (1 byte) + ...
+                            if packet.data.len() >= 10 {
+                                self.channel_count = packet.data[9] as u16;
+                                debug!("Detected {} channels in input stream", self.channel_count);
+
+                                // Resize the decoded buffer based on the input channel count
+                                self.decoded_buffer =
+                                    vec![0f32; FRAME_SIZE * self.channel_count as usize];
+                            } else {
+                                debug!("Invalid OpusHead packet, using default channel count");
+                            }
+
                             self.header_processed = true;
                             return Ok(None);
                         } else {
@@ -87,10 +104,27 @@ impl AudioStream {
                         if is_opus_tags(&packet.data) {
                             debug!("Found OpusTags packet");
                             self.comments_processed = true;
+
+                            // Create decoder with the correct channel count for this input stream
+                            let channels = match self.channel_count {
+                                1 => Channels::Mono,
+                                2 => Channels::Stereo,
+                                _ => {
+                                    debug!(
+                                        "Unsupported channel count: {}, defaulting to stereo",
+                                        self.channel_count
+                                    );
+                                    Channels::Stereo
+                                }
+                            };
+
+                            debug!("Creating decoder with {} channels", self.channel_count);
+
                             self.decoder =
-                                Some(Decoder::new(SAMPLE_RATE, Channels::Mono).map_err(|e| {
+                                Some(Decoder::new(SAMPLE_RATE, channels).map_err(|e| {
                                     JsValue::from_str(&format!("Opus decoder error: {}", e))
                                 })?);
+
                             return Ok(None);
                         } else {
                             debug!("Skipping non-tags packet while looking for OpusTags");
@@ -127,6 +161,11 @@ impl AudioStream {
 
     pub fn get_decoded_samples(&self) -> &[f32] {
         &self.decoded_buffer
+    }
+
+    /// Get the channel count of this input stream (1 for mono, 2 for stereo)
+    pub fn get_channel_count(&self) -> u16 {
+        self.channel_count
     }
 
     /// Seek to a target timestamp using bisection search as specified in RFC 7845

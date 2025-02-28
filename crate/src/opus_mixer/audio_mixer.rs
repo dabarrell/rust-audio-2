@@ -144,6 +144,7 @@ impl AudioMixer {
                 stream.current_timestamp()
             );
         }
+
         Ok(())
     }
 
@@ -196,14 +197,31 @@ impl AudioMixer {
                 Some(decoded_samples) => {
                     debug!("Stream {} provided {} samples", stream_idx, decoded_samples);
 
-                    let sample_count = decoded_samples * CHANNELS as usize;
+                    let stream_channels = stream.get_channel_count();
                     let compensation = stream.drift_compensation;
+                    let stream_samples = stream.get_decoded_samples();
 
-                    // Apply drift compensation and mix into output buffer
-                    for i in 0..sample_count {
-                        self.mixed_buffer[i] += stream.get_decoded_samples()[i] * compensation
-                            / self.active_streams as f32;
+                    // Mix samples based on input channel configuration
+                    if stream_channels == 2 {
+                        // Stereo input - direct mix to stereo output
+                        let sample_count = decoded_samples * 2; // 2 channels
+                        for i in 0..sample_count {
+                            self.mixed_buffer[i] +=
+                                stream_samples[i] * compensation / self.active_streams as f32;
+                        }
+                    } else if stream_channels == 1 {
+                        // Mono input - upmix to stereo output
+                        for i in 0..decoded_samples {
+                            let mono_sample =
+                                stream_samples[i] * compensation / self.active_streams as f32;
+                            // Duplicate mono sample to both left and right channels
+                            self.mixed_buffer[i * 2] += mono_sample; // Left
+                            self.mixed_buffer[i * 2 + 1] += mono_sample; // Right
+                        }
+                    } else {
+                        debug!("Unsupported channel count: {}, cannot mix", stream_channels);
                     }
+
                     samples_mixed = true;
                 }
                 None => {
