@@ -70,7 +70,12 @@ impl AudioEngine {
         // Create a web worker for the oscillator
         let worker = web_sys::Worker::new("/oscillator-worker.js")?;
 
-        // Set up message handler for the worker
+        // Store the worker
+        self.worker = Some(worker.clone());
+
+        // Set up a message handler for the worker that handles all message types
+        let engine_ptr = self as *mut AudioEngine;
+        let context_clone = self.context.clone();
         let callback = Closure::wrap(Box::new(move |event: web_sys::MessageEvent| {
             let data = event.data();
             let js_obj = js_sys::Object::from(data);
@@ -85,6 +90,81 @@ impl AudioEngine {
             let success = success_val.as_bool().unwrap_or(false);
 
             match type_str.as_str() {
+                "initialized" => {
+                    if success {
+                        log("Worker initialized successfully, setting up AudioWorkletNode");
+
+                        // Get the shared buffer from the worker
+                        if let Ok(buffer_val) =
+                            js_sys::Reflect::get(&js_obj, &"sharedBuffer".into())
+                        {
+                            if !buffer_val.is_undefined() {
+                                let shared_buffer = js_sys::SharedArrayBuffer::from(buffer_val);
+
+                                // Create the oscillator node with the shared buffer
+                                let options = web_sys::AudioWorkletNodeOptions::new();
+                                let processor_options = js_sys::Object::new();
+
+                                // Pass the shared buffer to the processor
+                                js_sys::Reflect::set(
+                                    &processor_options,
+                                    &"sharedBuffer".into(),
+                                    &shared_buffer,
+                                )
+                                .unwrap();
+                                options.set_processor_options(Some(&processor_options));
+
+                                if let Ok(oscillator_node) = AudioWorkletNode::new_with_options(
+                                    &context_clone,
+                                    "oscillator-processor",
+                                    &options,
+                                ) {
+                                    // Connect the oscillator to the audio output
+                                    let _ = oscillator_node
+                                        .connect_with_audio_node(&context_clone.destination());
+
+                                    // Store the node in a global variable so it can be accessed later
+                                    let window =
+                                        web_sys::window().expect("no global window exists");
+                                    js_sys::Reflect::set(
+                                        &window,
+                                        &"__oscillatorNode".into(),
+                                        &oscillator_node,
+                                    )
+                                    .unwrap();
+
+                                    log("AudioWorkletNode created and connected");
+
+                                    // Update the engine state
+                                    unsafe {
+                                        if !engine_ptr.is_null() {
+                                            let engine = &mut *engine_ptr;
+                                            engine.oscillator_node = Some(oscillator_node);
+                                            engine.shared_buffer = Some(shared_buffer);
+                                            engine.is_initialized = true;
+
+                                            // Process any pending operations
+                                            let pending_ops =
+                                                std::mem::take(&mut engine.pending_operations);
+                                            for op in pending_ops {
+                                                match op {
+                                                    PendingOperation::Start => {
+                                                        let _ = engine.start_oscillator();
+                                                    }
+                                                    PendingOperation::SetFrequency(freq) => {
+                                                        let _ = engine.set_frequency(freq);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        log("Failed to initialize worker");
+                    }
+                }
                 "started" => {
                     if success {
                         log("Oscillator started successfully");
@@ -99,13 +179,6 @@ impl AudioEngine {
                         log("Failed to stop oscillator");
                     }
                 }
-                "initialized" => {
-                    if success {
-                        log("Worker initialized successfully");
-                    } else {
-                        log("Failed to initialize worker");
-                    }
-                }
                 "frequencySet" => {
                     if success {
                         log("Frequency set successfully");
@@ -118,102 +191,6 @@ impl AudioEngine {
                 }
             }
         }) as Box<dyn FnMut(web_sys::MessageEvent)>);
-
-        worker.set_onmessage(Some(callback.as_ref().unchecked_ref()));
-        callback.forget();
-
-        // Store the worker
-        self.worker = Some(worker.clone());
-
-        // Set up a one-time message handler to get the shared buffer during initialization
-        let engine_ptr = self as *mut AudioEngine;
-        let context_clone = self.context.clone();
-        let callback = Closure::once(Box::new(move |event: web_sys::MessageEvent| {
-            let data = event.data();
-            let js_obj = js_sys::Object::from(data);
-
-            // Get the message type
-            let type_val = js_sys::Reflect::get(&js_obj, &"type".into()).unwrap_or(JsValue::NULL);
-            let type_str = type_val.as_string().unwrap_or_default();
-
-            log(&format!("Received message type: {}", type_str));
-
-            if type_str == "initialized" {
-                // Get the success flag
-                let success_val =
-                    js_sys::Reflect::get(&js_obj, &"success".into()).unwrap_or(JsValue::NULL);
-                let success = success_val.as_bool().unwrap_or(false);
-
-                if success {
-                    log("Worker initialized successfully, setting up AudioWorkletNode");
-
-                    // Get the shared buffer from the worker
-                    if let Ok(buffer_val) = js_sys::Reflect::get(&js_obj, &"sharedBuffer".into()) {
-                        if !buffer_val.is_undefined() {
-                            let shared_buffer = js_sys::SharedArrayBuffer::from(buffer_val);
-
-                            // Create the oscillator node with the shared buffer
-                            let options = web_sys::AudioWorkletNodeOptions::new();
-                            let processor_options = js_sys::Object::new();
-
-                            // Pass the shared buffer to the processor
-                            js_sys::Reflect::set(
-                                &processor_options,
-                                &"sharedBuffer".into(),
-                                &shared_buffer,
-                            )
-                            .unwrap();
-                            options.set_processor_options(Some(&processor_options));
-
-                            if let Ok(oscillator_node) = AudioWorkletNode::new_with_options(
-                                &context_clone,
-                                "oscillator-processor",
-                                &options,
-                            ) {
-                                // Connect the oscillator to the audio output
-                                let _ = oscillator_node
-                                    .connect_with_audio_node(&context_clone.destination());
-
-                                // Store the node in a global variable so it can be accessed later
-                                let window = web_sys::window().expect("no global window exists");
-                                js_sys::Reflect::set(
-                                    &window,
-                                    &"__oscillatorNode".into(),
-                                    &oscillator_node,
-                                )
-                                .unwrap();
-
-                                log("AudioWorkletNode created and connected");
-
-                                // Update the engine state
-                                unsafe {
-                                    if !engine_ptr.is_null() {
-                                        let engine = &mut *engine_ptr;
-                                        engine.oscillator_node = Some(oscillator_node);
-                                        engine.shared_buffer = Some(shared_buffer);
-                                        engine.is_initialized = true;
-
-                                        // Process any pending operations
-                                        let pending_ops =
-                                            std::mem::take(&mut engine.pending_operations);
-                                        for op in pending_ops {
-                                            match op {
-                                                PendingOperation::Start => {
-                                                    let _ = engine.start_oscillator();
-                                                }
-                                                PendingOperation::SetFrequency(freq) => {
-                                                    let _ = engine.set_frequency(freq);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }) as Box<dyn FnOnce(web_sys::MessageEvent)>);
 
         worker.set_onmessage(Some(callback.as_ref().unchecked_ref()));
         callback.forget();
