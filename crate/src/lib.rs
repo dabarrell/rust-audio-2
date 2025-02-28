@@ -20,9 +20,9 @@ extern "C" {
 
 #[wasm_bindgen]
 #[derive(Clone)]
-pub struct AudioEngine {
+pub struct AudioEngineInterface {
     context: AudioContext,
-    oscillator_node: Option<AudioWorkletNode>,
+    audio_output_node: Option<AudioWorkletNode>,
     shared_buffer: Option<js_sys::SharedArrayBuffer>,
     worker: Option<web_sys::Worker>,
     is_initialized: bool,
@@ -38,17 +38,17 @@ enum PendingOperation {
 }
 
 #[wasm_bindgen]
-impl AudioEngine {
+impl AudioEngineInterface {
     #[wasm_bindgen(constructor)]
-    pub fn new() -> Result<AudioEngine, JsValue> {
+    pub fn new() -> Result<AudioEngineInterface, JsValue> {
         utils::set_panic_hook();
 
         // Create a new audio context
         let context = AudioContext::new()?;
 
-        Ok(AudioEngine {
+        Ok(AudioEngineInterface {
             context,
-            oscillator_node: None,
+            audio_output_node: None,
             shared_buffer: None,
             worker: None,
             is_initialized: false,
@@ -58,7 +58,7 @@ impl AudioEngine {
     }
 
     pub async fn init(&mut self) -> Result<(), JsValue> {
-        log("Initializing AudioEngine");
+        log("Initializing AudioEngineInterface");
 
         // Load the audio worklet processor
         let worklet = self.context.audio_worklet()?;
@@ -76,7 +76,7 @@ impl AudioEngine {
         self.worker = Some(worker.clone());
 
         // Set up a message handler for the worker that handles all message types
-        let engine_ptr = self as *mut AudioEngine;
+        let engine_ptr = self as *mut AudioEngineInterface;
         let context_clone = self.context.clone();
         let callback = Closure::wrap(Box::new(move |event: web_sys::MessageEvent| {
             let data = event.data();
@@ -116,13 +116,13 @@ impl AudioEngine {
                                 .unwrap();
                                 options.set_processor_options(Some(&processor_options));
 
-                                if let Ok(oscillator_node) = AudioWorkletNode::new_with_options(
+                                if let Ok(audio_output_node) = AudioWorkletNode::new_with_options(
                                     &context_clone,
                                     "audio-output-processor",
                                     &options,
                                 ) {
                                     // Connect the audio node to the audio output
-                                    let _ = oscillator_node
+                                    let _ = audio_output_node
                                         .connect_with_audio_node(&context_clone.destination());
 
                                     // Store the node in a global variable so it can be accessed later
@@ -131,7 +131,7 @@ impl AudioEngine {
                                     js_sys::Reflect::set(
                                         &window,
                                         &"__audioOutputNode".into(),
-                                        &oscillator_node,
+                                        &audio_output_node,
                                     )
                                     .unwrap();
 
@@ -141,7 +141,7 @@ impl AudioEngine {
                                     unsafe {
                                         if !engine_ptr.is_null() {
                                             let engine = &mut *engine_ptr;
-                                            engine.oscillator_node = Some(oscillator_node);
+                                            engine.audio_output_node = Some(audio_output_node);
                                             engine.shared_buffer = Some(shared_buffer);
                                             engine.is_initialized = true;
 
@@ -151,7 +151,7 @@ impl AudioEngine {
                                             for op in pending_ops {
                                                 match op {
                                                     PendingOperation::Start => {
-                                                        let _ = engine.start_oscillator();
+                                                        let _ = engine.start();
                                                     }
                                                     PendingOperation::SetFrequency(freq) => {
                                                         let _ = engine.set_frequency(freq);
@@ -231,8 +231,8 @@ impl AudioEngine {
         Ok(())
     }
 
-    // Helper method to start the oscillator
-    fn start_oscillator(&self) -> Result<(), JsValue> {
+    // Helper method to start the audio engine
+    fn start(&self) -> Result<(), JsValue> {
         if let Some(worker) = &self.worker {
             let msg = js_sys::Object::new();
             js_sys::Reflect::set(&msg, &"type".into(), &"start".into())?;
@@ -310,7 +310,7 @@ impl AudioEngine {
         // Resume the audio context
         JsFuture::from(self.context.resume()?).await?;
 
-        // Start the oscillator in the worker if initialized
+        // Start the audio engine in the worker if initialized
         if !self.is_initialized {
             // Queue the operation for later
             self.pending_operations.push(PendingOperation::Start);
@@ -318,7 +318,7 @@ impl AudioEngine {
             return Ok(());
         }
 
-        self.start_oscillator()?;
+        self.start()?;
 
         Ok(())
     }
@@ -326,7 +326,7 @@ impl AudioEngine {
     pub async fn suspend(&self) -> Result<(), JsValue> {
         // Only try to stop if initialized
         if self.is_initialized {
-            // Stop the oscillator in the worker
+            // Stop the audio engine in the worker
             if let Some(worker) = &self.worker {
                 let msg = js_sys::Object::new();
                 js_sys::Reflect::set(&msg, &"type".into(), &"stop".into())?;

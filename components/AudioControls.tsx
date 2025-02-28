@@ -10,8 +10,8 @@ interface AudioFileEvent {
   error?: string;
 }
 
-// We'll need to define the AudioEngine type since TypeScript doesn't know about it
-interface AudioEngine {
+// We'll need to define the AudioEngineInterface type since TypeScript doesn't know about it
+interface AudioEngineInterface {
   init(): Promise<void>;
   set_frequency(frequency: number): void;
   resume(): Promise<void>;
@@ -23,7 +23,7 @@ interface AudioEngine {
 function AudioControls() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [frequency, setFrequency] = useState(440);
-  const audioEngineRef = useRef<AudioEngine | null>(null);
+  const audioEngineRef = useRef<AudioEngineInterface | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,9 +43,9 @@ function AudioControls() {
         console.log('WASM module loaded');
 
         // Create a new audio engine
-        // Use type assertion to tell TypeScript about the AudioEngine constructor
-        const AudioEngineClass = wasmImport.AudioEngine as unknown as { new(): AudioEngine };
-        const engine = new AudioEngineClass();
+        // Use type assertion to tell TypeScript about the AudioEngineInterface constructor
+        const AudioEngineInterfaceClass = wasmImport.AudioEngineInterface as unknown as { new(): AudioEngineInterface };
+        const engine = new AudioEngineInterfaceClass();
 
         // Initialize the audio engine
         await engine.init();
