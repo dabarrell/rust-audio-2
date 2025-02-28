@@ -164,7 +164,7 @@ function AudioControls() {
 
   return (
     <div className="p-4 border rounded-lg shadow-sm">
-      <h2 className="text-xl font-bold mb-4">Rust WASM Oscillator</h2>
+      <h2 className="text-xl font-bold mb-4">Rust WASM Audio Engine</h2>
 
       {isLoading ? (
         <p className="text-gray-500">Loading WASM module...</p>
@@ -220,7 +220,7 @@ function AudioControls() {
                 disabled={!selectedFile || !isInitialized}
                 className="px-4 py-2 rounded bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Send to Worker
+                Send to Audio Engine
               </button>
             </div>
 

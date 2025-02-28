@@ -62,15 +62,15 @@ impl AudioEngine {
 
         // Load the audio worklet processor
         let worklet = self.context.audio_worklet()?;
-        let promise = worklet.add_module("/oscillator-processor.js")?;
+        let promise = worklet.add_module("/audio-output-processor.js")?;
 
         // Wait for the module to load
         JsFuture::from(promise).await?;
 
         log("Audio worklet module loaded successfully");
 
-        // Create a web worker for the oscillator
-        let worker = web_sys::Worker::new("/oscillator-worker.js")?;
+        // Create a web worker for the audio engine
+        let worker = web_sys::Worker::new("/audio-engine-worker.js")?;
 
         // Store the worker
         self.worker = Some(worker.clone());
@@ -103,7 +103,7 @@ impl AudioEngine {
                             if !buffer_val.is_undefined() {
                                 let shared_buffer = js_sys::SharedArrayBuffer::from(buffer_val);
 
-                                // Create the oscillator node with the shared buffer
+                                // Create the audio output node with the shared buffer
                                 let options = web_sys::AudioWorkletNodeOptions::new();
                                 let processor_options = js_sys::Object::new();
 
@@ -118,10 +118,10 @@ impl AudioEngine {
 
                                 if let Ok(oscillator_node) = AudioWorkletNode::new_with_options(
                                     &context_clone,
-                                    "oscillator-processor",
+                                    "audio-output-processor",
                                     &options,
                                 ) {
-                                    // Connect the oscillator to the audio output
+                                    // Connect the audio node to the audio output
                                     let _ = oscillator_node
                                         .connect_with_audio_node(&context_clone.destination());
 
@@ -130,7 +130,7 @@ impl AudioEngine {
                                         web_sys::window().expect("no global window exists");
                                     js_sys::Reflect::set(
                                         &window,
-                                        &"__oscillatorNode".into(),
+                                        &"__audioOutputNode".into(),
                                         &oscillator_node,
                                     )
                                     .unwrap();
@@ -169,16 +169,16 @@ impl AudioEngine {
                 }
                 "started" => {
                     if success {
-                        log("Oscillator started successfully");
+                        log("Audio engine started successfully");
                     } else {
-                        log("Failed to start oscillator");
+                        log("Failed to start audio engine");
                     }
                 }
                 "stopped" => {
                     if success {
-                        log("Oscillator stopped successfully");
+                        log("Audio engine stopped successfully");
                     } else {
-                        log("Failed to stop oscillator");
+                        log("Failed to stop audio engine");
                     }
                 }
                 "frequencySet" => {

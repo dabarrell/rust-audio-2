@@ -1,5 +1,5 @@
-// Web worker for handling oscillator processing
-let oscillator;
+// Web worker for handling audio engine processing
+let audioEngine;
 let processorIntervalId;
 let isInitialized = false;
 let sharedBuffer;
@@ -16,7 +16,7 @@ self.onmessage = async (event) => {
     case 'init':
       // Prevent multiple initialization attempts
       if (isInitializing || isInitialized) {
-        console.log('Oscillator worker already initialized or initializing');
+        console.log('Audio engine worker already initialized or initializing');
 
         // If already initialized, send the shared buffer again
         if (isInitialized && sharedBuffer) {
@@ -65,19 +65,19 @@ self.onmessage = async (event) => {
         return;
       }
 
-      // Start the oscillator
-      startOscillator();
+      // Start the audio engine
+      startAudioEngine();
       break;
 
     case 'stop':
       // Ignore if not initialized
       if (!isInitialized) {
-        console.log('Ignoring stop operation - oscillator not initialized');
+        console.log('Ignoring stop operation - audio engine not initialized');
         return;
       }
 
-      // Stop the oscillator
-      stopOscillator();
+      // Stop the audio engine
+      stopAudioEngine();
       break;
 
     case 'setFrequency':
@@ -106,10 +106,10 @@ async function initWorker(sampleRate) {
     await wasmImport.default();
 
     const OscillatorClass = wasmImport.Oscillator;
-    oscillator = new OscillatorClass(sampleRate);
+    audioEngine = new OscillatorClass(sampleRate);
 
     // Get the shared buffer to reuse later
-    sharedBuffer = oscillator.get_shared_buffer();
+    sharedBuffer = audioEngine.get_shared_buffer();
 
     // Mark as initialized
     isInitialized = true;
@@ -122,12 +122,12 @@ async function initWorker(sampleRate) {
       sharedBuffer
     });
 
-    console.log('Oscillator worker initialized successfully');
+    console.log('Audio engine worker initialized successfully');
 
     // Process any pending operations
     processPendingOperations();
   } catch (error) {
-    console.error('Failed to initialize oscillator worker:', error);
+    console.error('Failed to initialize audio engine worker:', error);
     isInitializing = false;
 
     self.postMessage({
@@ -147,7 +147,7 @@ function processPendingOperations() {
     pendingOperations.forEach(op => {
       switch (op.type) {
         case 'start':
-          startOscillator();
+          startAudioEngine();
           break;
         case 'setFrequency':
           setFrequency(op.frequency);
@@ -160,19 +160,19 @@ function processPendingOperations() {
   }
 }
 
-// Start the oscillator
-function startOscillator() {
+// Start the audio engine
+function startAudioEngine() {
   try {
     if (!isInitialized) {
-      throw new Error('Oscillator not initialized');
+      throw new Error('Audio engine not initialized');
     }
 
-    if (!oscillator) {
-      throw new Error('Oscillator missing');
+    if (!audioEngine) {
+      throw new Error('Audio engine missing');
     }
 
-    // Start the oscillator
-    oscillator.start();
+    // Start the audio engine
+    audioEngine.start();
 
     // Set up an interval to process audio samples
     if (processorIntervalId) {
@@ -180,9 +180,9 @@ function startOscillator() {
     }
 
     processorIntervalId = setInterval(() => {
-      if (oscillator) {
+      if (audioEngine) {
         // Process 256 samples at a time
-        oscillator.process(256);
+        audioEngine.process(256);
       }
     }, 2); // Process every 2ms
 
@@ -193,9 +193,9 @@ function startOscillator() {
       sharedBuffer
     });
 
-    console.log('Oscillator started');
+    console.log('Audio engine started');
   } catch (error) {
-    console.error('Failed to start oscillator:', error);
+    console.error('Failed to start audio engine:', error);
     self.postMessage({
       type: 'started',
       success: false,
@@ -204,14 +204,14 @@ function startOscillator() {
   }
 }
 
-// Stop the oscillator
-function stopOscillator() {
+// Stop the audio engine
+function stopAudioEngine() {
   try {
-    if (!isInitialized || !oscillator) {
-      throw new Error('Oscillator not initialized');
+    if (!isInitialized || !audioEngine) {
+      throw new Error('Audio engine not initialized');
     }
 
-    oscillator.stop();
+    audioEngine.stop();
 
     if (processorIntervalId) {
       clearInterval(processorIntervalId);
@@ -223,9 +223,9 @@ function stopOscillator() {
       success: true
     });
 
-    console.log('Oscillator stopped');
+    console.log('Audio engine stopped');
   } catch (error) {
-    console.error('Failed to stop oscillator:', error);
+    console.error('Failed to stop audio engine:', error);
     self.postMessage({
       type: 'stopped',
       success: false,
@@ -237,11 +237,11 @@ function stopOscillator() {
 // Set the oscillator frequency
 function setFrequency(frequency) {
   try {
-    if (!isInitialized || !oscillator) {
-      throw new Error('Oscillator not initialized');
+    if (!isInitialized || !audioEngine) {
+      throw new Error('Audio engine not initialized');
     }
 
-    oscillator.set_frequency(frequency);
+    audioEngine.set_frequency(frequency);
 
     self.postMessage({
       type: 'frequencySet',

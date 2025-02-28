@@ -1,5 +1,5 @@
 // Audio worklet processor for reading from a shared buffer
-class OscillatorProcessor extends AudioWorkletProcessor {
+class AudioOutputProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
 
@@ -24,9 +24,9 @@ class OscillatorProcessor extends AudioWorkletProcessor {
       // Initialize
       this.isInitialized = true;
 
-      console.log(`OscillatorProcessor initialized with buffer size: ${this.bufferSize}`);
+      console.log(`AudioOutputProcessor initialized with buffer size: ${this.bufferSize}`);
     } else {
-      console.error('OscillatorProcessor: No shared buffer provided');
+      console.error('AudioOutputProcessor: No shared buffer provided');
     }
   }
 
@@ -90,9 +90,9 @@ class OscillatorProcessor extends AudioWorkletProcessor {
 }
 
 try {
-  console.log('OscillatorProcessor registering...');
-  registerProcessor('oscillator-processor', OscillatorProcessor);
-  console.log('OscillatorProcessor registered');
+  console.log('AudioOutputProcessor registering...');
+  registerProcessor('audio-output-processor', AudioOutputProcessor);
+  console.log('AudioOutputProcessor registered');
 } catch (error) {
-  console.error('Failed to register OscillatorProcessor:', error);
+  console.error('Failed to register AudioOutputProcessor:', error);
 }
