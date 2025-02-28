@@ -1,5 +1,5 @@
 // Web worker for handling audio engine processing
-let audioEngine;
+let audioSource;
 let processorIntervalId;
 let isInitialized = false;
 let sharedBuffer;
@@ -105,11 +105,11 @@ async function initWorker(sampleRate) {
     const wasmImport = await import('/wasm/wasm_pack_test_27_feb.js');
     await wasmImport.default();
 
-    const OscillatorClass = wasmImport.Oscillator;
-    audioEngine = new OscillatorClass(sampleRate);
+    // Create an oscillator source
+    audioSource = wasmImport.AudioSource.createOscillator(sampleRate);
 
     // Get the shared buffer to reuse later
-    sharedBuffer = audioEngine.get_shared_buffer();
+    sharedBuffer = audioSource.get_shared_buffer();
 
     // Mark as initialized
     isInitialized = true;
@@ -167,12 +167,12 @@ function startAudioEngine() {
       throw new Error('Audio engine not initialized');
     }
 
-    if (!audioEngine) {
-      throw new Error('Audio engine missing');
+    if (!audioSource) {
+      throw new Error('Audio source missing');
     }
 
-    // Start the audio engine
-    audioEngine.start();
+    // Start the audio source
+    audioSource.start();
 
     // Set up an interval to process audio samples
     if (processorIntervalId) {
@@ -180,9 +180,9 @@ function startAudioEngine() {
     }
 
     processorIntervalId = setInterval(() => {
-      if (audioEngine) {
+      if (audioSource) {
         // Process 256 samples at a time
-        audioEngine.process(256);
+        audioSource.process(256);
       }
     }, 2); // Process every 2ms
 
@@ -207,11 +207,11 @@ function startAudioEngine() {
 // Stop the audio engine
 function stopAudioEngine() {
   try {
-    if (!isInitialized || !audioEngine) {
+    if (!isInitialized || !audioSource) {
       throw new Error('Audio engine not initialized');
     }
 
-    audioEngine.stop();
+    audioSource.stop();
 
     if (processorIntervalId) {
       clearInterval(processorIntervalId);
@@ -237,11 +237,11 @@ function stopAudioEngine() {
 // Set the oscillator frequency
 function setFrequency(frequency) {
   try {
-    if (!isInitialized || !audioEngine) {
+    if (!isInitialized || !audioSource) {
       throw new Error('Audio engine not initialized');
     }
 
-    audioEngine.set_frequency(frequency);
+    audioSource.set_frequency(frequency);
 
     self.postMessage({
       type: 'frequencySet',

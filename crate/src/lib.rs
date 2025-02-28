@@ -1,5 +1,6 @@
 mod oscillator;
 mod ring_buffer;
+mod source;
 mod utils;
 
 use wasm_bindgen::prelude::*;
@@ -9,6 +10,7 @@ use web_sys::{AudioContext, AudioWorkletNode};
 // Re-export the ring buffer and oscillator modules
 pub use oscillator::Oscillator;
 pub use ring_buffer::{get_buffer_size, get_metadata_size, RingBuffer};
+pub use source::{AudioSource, SourceType};
 
 #[wasm_bindgen]
 extern "C" {
