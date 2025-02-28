@@ -227,7 +227,7 @@ function startAudioEngine() {
         // Process FRAME_SIZE * 8 samples at a time
         audioSource.process(960 * 8);
       }
-    }, 100); // Process every 2ms
+    }, 10); // Process every 2ms
 
     // Send success message with the shared buffer
     self.postMessage({

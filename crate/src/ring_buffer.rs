@@ -2,10 +2,8 @@ use js_sys::{Float32Array, SharedArrayBuffer};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use wasm_bindgen::prelude::*;
 
-use crate::opus_mixer::FRAME_SIZE;
-
 // Constants for the ring buffer
-const BUFFER_SIZE: usize = FRAME_SIZE * 8; // Must be a power of 2
+const BUFFER_SIZE: usize = 4096; // Must be a power of 2 (~4 frames)
 const BUFFER_MASK: usize = BUFFER_SIZE - 1; // For efficient modulo operations
 const METADATA_SIZE: usize = 2; // For read and write pointers
 
