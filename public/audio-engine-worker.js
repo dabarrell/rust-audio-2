@@ -7,6 +7,8 @@ let isInitializing = false;
 let pendingOperations = [];
 let sourceType = 'oscillator'; // Default source type
 
+// TODO: Move most of this to rust
+
 // Handle messages from the main thread
 self.onmessage = async (event) => {
   console.log('Received message:', event.data);

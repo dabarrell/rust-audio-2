@@ -12,6 +12,8 @@ use crate::opus_mixer::drift_stats::DriftStats;
 use crate::opus_mixer::{is_opus_header, is_opus_tags, CHANNELS, FRAME_SIZE, SAMPLE_RATE};
 use crate::utils::read_file_to_array_buffer;
 
+// TODO: offload to separate web workers, ala https://github.com/rustwasm/wasm-bindgen/tree/main/examples/raytrace-parallel
+
 /// A single audio stream from an Opus file
 pub struct AudioStream {
     pub(crate) packet_reader: PacketReader<Cursor<Vec<u8>>>,

@@ -1,3 +1,6 @@
+// TODO: move most of this into rust, as per https://github.com/rustwasm/wasm-bindgen/blob/main/examples/wasm-audio-worklet/src/worklet.js
+
+
 // Audio worklet processor for reading from a shared buffer
 class AudioOutputProcessor extends AudioWorkletProcessor {
   constructor(options) {
