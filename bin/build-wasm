@@ -1,0 +1,21 @@
+#!/bin/bash
+
+export RUSTFLAGS="-C target-feature=+atomics,+bulk-memory,+mutable-globals"
+# rustup install nightly
+# rustup override set nightly
+rustup component add rust-src
+# rustup target add wasm32-unknown-unknown --toolchain nightly
+rustup target add wasm32-unknown-unknown
+curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+# Set default output directory
+OUT_DIR="../public/wasm"
+
+# Override output directory if argument is provided
+if [ $# -eq 1 ]; then
+    OUT_DIR="$1"
+fi
+
+# Build the WASM module
+# wasm-pack build --target web --out-dir "../$OUT_DIR" --no-pack crate/ -- -Z build-std=std,panic_abort
+wasm-pack build --target web --out-dir "../$OUT_DIR" --no-pack crate/
