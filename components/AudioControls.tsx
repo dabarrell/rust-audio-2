@@ -34,7 +34,7 @@ function AudioControls() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [fileStatus, setFileStatus] = useState<string | null>(null);
-  const [sourceType, setSourceType] = useState<SourceType>('oscillator');
+  const [sourceType, setSourceType] = useState<SourceType>('opusPlayer');
   const [needsReinitialization, setNeedsReinitialization] = useState(false);
   const [loadingDemoFiles, setLoadingDemoFiles] = useState(false);
 

@@ -50,7 +50,7 @@ impl AudioEngineInterface {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Result<AudioEngineInterface, JsValue> {
         utils::set_panic_hook();
-        set_debug(true);
+        set_debug(false);
 
         // Create a new audio context
         let context = AudioContext::new()?;
@@ -63,7 +63,7 @@ impl AudioEngineInterface {
             is_initialized: false,
             pending_operations: Vec::new(),
             audio_file_callback: None,
-            source_type: "oscillator".to_string(), // Default to oscillator
+            source_type: "opusPlayer".to_string(), // Default to opusPlayer
         })
     }
 
