@@ -18,7 +18,7 @@ pub fn is_debug_enabled() -> bool {
 #[macro_export]
 macro_rules! debug {
     ($($arg:tt)*) => {{
-        // if $crate::debug::is_debug_enabled() {
+        if $crate::debug::is_debug_enabled() {
             #[cfg(target_arch = "wasm32")]
             {
                 use wasm_bindgen::JsValue;
@@ -28,6 +28,6 @@ macro_rules! debug {
             {
                 println!($($arg)*);
             }
-        // }
+        }
     }};
 }

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "build:wasm": "RUSTFLAGS=\"-C target-feature=+atomics,+bulk-memory,+mutable-globals -C debuginfo=2\" wasm-pack build --target web --out-dir ../public/wasm --no-pack crate/",
+    "build:wasm": "RUSTFLAGS=\"-C target-feature=+atomics,+bulk-memory,+mutable-globals -C debuginfo=2\" wasm-pack build --release --target web --out-dir ../public/wasm --no-pack crate/",
     "build:wasm:dev": "RUSTFLAGS=\"-C target-feature=+atomics,+bulk-memory,+mutable-globals -C debuginfo=2\" wasm-pack build --dev --target web --out-dir ../public/wasm --no-pack crate/"
   },
   "dependencies": {

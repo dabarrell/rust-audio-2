@@ -18,4 +18,4 @@ fi
 
 # Build the WASM module
 # wasm-pack build --target web --out-dir "../$OUT_DIR" --no-pack crate/ -- -Z build-std=std,panic_abort
-wasm-pack build --target web --out-dir "../$OUT_DIR" --no-pack crate/
+wasm-pack build --target web --release --out-dir "../$OUT_DIR" --no-pack crate/
