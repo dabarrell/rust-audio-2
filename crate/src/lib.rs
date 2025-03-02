@@ -297,39 +297,6 @@ impl AudioEngineInterface {
         self.worker.clone()
     }
 
-    // Method to send an audio file to the worker
-    pub fn send_audio_file(&self, file: JsValue) -> Result<(), JsValue> {
-        if !self.is_initialized {
-            log("Cannot send audio file - engine not initialized");
-            return Err(JsValue::from_str("Audio engine not initialized"));
-        }
-
-        if let Some(worker) = &self.worker {
-            let msg = js_sys::Object::new();
-            js_sys::Reflect::set(&msg, &"type".into(), &"loadAudioFile".into())?;
-
-            let data = js_sys::Object::new();
-            js_sys::Reflect::set(&data, &"file".into(), &file)?;
-            js_sys::Reflect::set(&msg, &"data".into(), &data)?;
-
-            // Get file name if possible
-            let file_name = if js_sys::Reflect::has(&file, &"name".into())? {
-                js_sys::Reflect::get(&file, &"name".into())?
-                    .as_string()
-                    .unwrap_or_else(|| "unknown".to_string())
-            } else {
-                "unknown".to_string()
-            };
-
-            log(&format!("Sending audio file '{}' to worker", file_name));
-            worker.post_message(&msg)?;
-        } else {
-            return Err(JsValue::from_str("Worker not available"));
-        }
-
-        Ok(())
-    }
-
     // Method to send multiple audio files to the worker
     pub fn send_audio_files(&self, files: JsValue) -> Result<(), JsValue> {
         if !self.is_initialized {

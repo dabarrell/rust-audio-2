@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 // Debug flag - can be enabled via environment variable
 static DEBUG: AtomicBool = AtomicBool::new(false);
 
+// TODO: This isn't working
 /// Enable or disable debug output
 pub fn set_debug(enabled: bool) {
     DEBUG.store(enabled, Ordering::Relaxed);
